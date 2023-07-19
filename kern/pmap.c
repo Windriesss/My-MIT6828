@@ -133,8 +133,6 @@ mem_init(void)
 	// Find out how much memory the machine has (npages & npages_basemem).
 	i386_detect_memory();
 
-	// Remove this line when you're ready to test this function.
-	// panic("mem_init: This function is not finished\n");
 
 	//////////////////////////////////////////////////////////////////////
 	// create initial page directory.
@@ -157,13 +155,14 @@ mem_init(void)
 	// array.  'npages' is the number of physical pages in memory.  Use memset
 	// to initialize all fields of each struct PageInfo to 0.
 	// Your code goes here:
-
 	pages = boot_alloc(npages*sizeof(struct PageInfo));
 	memset(pages,0,npages*sizeof(struct PageInfo));
 
 	//////////////////////////////////////////////////////////////////////
 	// Make 'envs' point to an array of size 'NENV' of 'struct Env'.
 	// LAB 3: Your code here.
+	envs = boot_alloc(NENV * sizeof(struct Env));
+	memset(envs, 0, NENV * sizeof(struct Env));
 
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
@@ -196,8 +195,9 @@ mem_init(void)
 	//    - the new image at UENVS  -- kernel R, user R
 	//    - envs itself -- kernel RW, user NONE
 	// LAB 3: Your code here.
+    boot_map_region(kern_pgdir, UENVS, PTSIZE, PADDR(envs), PTE_U);
 
-	//////////////////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
 	// stack.  The kernel stack grows down from virtual address KSTACKTOP.
 	// We consider the entire range from [KSTACKTOP-PTSIZE, KSTACKTOP)
@@ -414,7 +414,7 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 
 	pde_ptr = &pgdir[pde_num];
 	if(*pde_ptr & PTE_P){
-		// 清空标志位、且将物理地址转换为虚拟地址
+		// 清空标志位、且将物理地址转换为虚拟地址 页目录项里存的是物理地址，程序里用的全部是虚拟地址
 		pg_table = (pte_t *)(KADDR(PTE_ADDR(*pde_ptr)));
 		pte_ptr = &pg_table[pte_num];
 	}
@@ -495,13 +495,13 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 {
 	// Fill this function in
 
-	physaddr_t pa = page2pa(pp);
-	pte_t* pte_ptr = pgdir_walk(pgdir,va,1);
-	if(pte_ptr==NULL){
-		return -E_NO_MEM;
-	}
+    physaddr_t pa = page2pa(pp);
+    pte_t *pte_ptr = pgdir_walk(pgdir, va, 1);
+    if (pte_ptr == NULL) {
+        return -E_NO_MEM;
+    }
 
-	if ((*pte_ptr) & PTE_P){ //该页已存在，先清空
+    if ((*pte_ptr) & PTE_P){ //该页已存在，先清空
 		if(PTE_ADDR(*pte_ptr) == pa){// 同一个页面进行映射
 			*pte_ptr = pa | perm | PTE_P;
 			return 0;
@@ -511,7 +511,6 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 	
 	++pp->pp_ref;
 	*pte_ptr = pa|perm|PTE_P;
-
 	return 0;
 }
 
