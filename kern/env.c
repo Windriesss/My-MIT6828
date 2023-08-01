@@ -286,18 +286,19 @@ region_alloc(struct Env *e, void *va, size_t len)
 	//   You should round va down, and round (va + len) up.
 	//   (Watch out for corner-cases!)
 
-    size_t i;
-    uint32_t page_num = (ROUNDUP(va + len, PGSIZE) - ROUNDDOWN(va, PGSIZE)) / PGSIZE;
-    va = ROUNDDOWN(va, PGSIZE);
-    for (i = 0; i < page_num; ++i) {
-        struct PageInfo *p = page_alloc(ALLOC_ZERO);
-        if (!p) {
-            panic("allocation attempt fails");
+    uint32_t start = (uint32_t)ROUNDDOWN(va, PGSIZE);
+    uint32_t end = (uint32_t)ROUNDUP(va + len, PGSIZE);
+    struct PageInfo *p = NULL;
+    int re = -1;
+    for (; start < end; start += PGSIZE) {
+        p = page_alloc(0);
+        if (p == NULL) {
+            panic("the page allocation failed!\n");
         }
 
-        int re = page_insert(e->env_pgdir, p, (void *)(va + i * PGSIZE), PTE_W | PTE_U);
+        re = page_insert(e->env_pgdir, p, (void *)start, PTE_U | PTE_W);
         if (re != 0) {
-            panic("page insert failed");
+            panic("the page insert failed!\n");
         }
     }
 }
@@ -385,7 +386,6 @@ load_icode(struct Env *e, uint8_t *binary)
     // at virtual address USTACKTOP - PGSIZE.
 
     // LAB 3: Your code here.
-	cprintf("===========\n");
     region_alloc(e, (void *)(USTACKTOP - PGSIZE), PGSIZE);
 }
 
@@ -405,8 +405,8 @@ env_create(uint8_t *binary, enum EnvType type)
     if (env_alloc(&env, 0) != 0) {
         panic("env_create alloc failed");
     }
+	env->env_type = type;
     load_icode(env, binary);
-    env->env_type = type;
 }
 
 //
@@ -498,7 +498,6 @@ env_pop_tf(struct Trapframe *tf)
 {
 	// Record the CPU we are running on for user-space debugging
 	curenv->env_cpunum = cpunum();
-
 	asm volatile(
 		"\tmovl %0,%%esp\n"
 		"\tpopal\n"
@@ -537,17 +536,16 @@ env_run(struct Env *e)
 	//	e->env_tf to sensible values.
 
 	// LAB 3: Your code here.
-	if(curenv!=NULL && curenv->env_status==ENV_RUNNING){
-		curenv->env_status = ENV_RUNNABLE;
-	}
+    if (curenv != NULL && curenv->env_status == ENV_RUNNING) {
+        curenv->env_status = ENV_RUNNABLE;
+    }
 
-	curenv=e;
-	e->env_status=ENV_RUNNING;
-	e->env_runs++;
-	lcr3(PADDR(e->env_pgdir));
-
-	env_pop_tf(&(e->env_tf));
-	
-
+    curenv = e;
+    curenv->env_status = ENV_RUNNING;
+    curenv->env_runs++;
+    lcr3(PADDR(curenv->env_pgdir));
+	unlock_kernel();
+    env_pop_tf(&(curenv->env_tf));
+	panic("env_run not yet implemented");
 }
 

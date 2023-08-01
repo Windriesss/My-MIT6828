@@ -271,7 +271,12 @@ mem_init_mp(void)
 	//     Permissions: kernel RW, user NONE
 	//
 	// LAB 4: Your code here:
-
+	size_t i;
+	uintptr_t kstacktop_i;
+	for(i=0;i<NCPU;++i){
+		kstacktop_i=KSTACKTOP - i*(KSTKSIZE+KSTKGAP);
+		boot_map_region(kern_pgdir,kstacktop_i-KSTKSIZE,KSTKSIZE,PADDR(percpu_kstacks[i]),PTE_W);//两个线性地址映射到同一个物理地址，可以通过percpu_kstacks访问kstacktop_i；通过percpu_kstacks操作的内容同样会改变percpu_kstaks的内容
+	}
 }
 
 // --------------------------------------------------------------
@@ -315,8 +320,17 @@ page_init(void)
 	// 1. 标记页面0已经被IDT和其他BIOS struct使用
 	pages[0].pp_ref=1;
 
+	
 	// 2. 设置其他base memory是可用的
-	for(i=1;i<npages_basemem;++i){
+	for(i=1;i<PGNUM(MPENTRY_PADDR);++i){
+		pages[i].pp_ref=0;
+		pages[i].pp_link=page_free_list;
+		page_free_list = &pages[i];
+	}
+	// 2.1 MPENTRY已经占用
+	pages[PGNUM(MPENTRY_PADDR)].pp_ref=1;
+
+	for(i=PGNUM(MPENTRY_PADDR)+1;i<npages_basemem;++i){
 		pages[i].pp_ref=0;
 		pages[i].pp_link=page_free_list;
 		page_free_list = &pages[i];
@@ -647,7 +661,14 @@ mmio_map_region(physaddr_t pa, size_t size)
 	// Hint: The staff solution uses boot_map_region.
 	//
 	// Your code here:
-	panic("mmio_map_region not implemented");
+    if (base + size >= MMIOLIM) {
+        panic("mmio map out of MMIOLIM");
+    }
+    boot_map_region(kern_pgdir, base, size, pa, PTE_PCD | PTE_PWT | PTE_W);
+	void* ret = (void*)base;
+
+    base = ROUNDUP(base + size, PGSIZE);
+	return ret;
 }
 
 static uintptr_t user_mem_check_addr;

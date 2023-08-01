@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "syscall.h": "c",
-        "mmu.h": "c"
+        "mmu.h": "c",
+        "trap.h": "c"
     }
 }
