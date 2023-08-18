@@ -357,8 +357,51 @@ sys_page_unmap(envid_t envid, void *va)
 static int
 sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 {
-	// LAB 4: Your code here.
-	panic("sys_ipc_try_send not implemented");
+     // LAB 4: Your code here.
+     int r;
+     struct Env *recv_e;
+     pte_t *pte;
+     struct PageInfo *page;
+     r = envid2env(envid, &recv_e, 0);
+     if (r < 0) {
+        return r;
+    }
+    if(!recv_e->env_ipc_recving|| recv_e->env_status!=ENV_NOT_RUNNABLE){
+        return -E_IPC_NOT_RECV;
+    }
+    if (srcva < (void*)UTOP) {
+        if (srcva != ROUNDDOWN(srcva, PGSIZE)) {
+            return -E_INVAL;
+        }
+        if(!(perm&PTE_U)||!(perm&PTE_P)){
+            return -E_INVAL;
+        }
+        if((perm&~(PTE_P|PTE_U|PTE_W|PTE_AVAIL))){
+            return -E_INVAL;
+        }
+    }
+
+    page = page_lookup(curenv->env_pgdir,srcva,&pte);
+    if(srcva<(void*)UTOP && page==NULL){
+        return -E_INVAL;
+    }
+
+    if ((perm & PTE_W) && !(*pte & PTE_W)) {
+        return -E_INVAL;
+    }
+
+    if(srcva < (void*)UTOP&&recv_e->env_ipc_dstva!=0){
+        if((page_insert(recv_e->env_pgdir,page,recv_e->env_ipc_dstva,perm)<0)){
+            return -E_NO_MEM;
+        }
+        recv_e->env_ipc_perm = perm;
+    }
+    recv_e->env_ipc_from = curenv->env_id;
+    recv_e->env_ipc_recving = false;
+    recv_e->env_ipc_value = value;
+    recv_e->env_status = ENV_RUNNABLE;
+    recv_e->env_tf.tf_regs.reg_eax=0;
+    return 0;
 }
 
 // Block until a value is ready.  Record that you want to receive
@@ -375,9 +418,19 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 static int
 sys_ipc_recv(void *dstva)
 {
-	// LAB 4: Your code here.
-	panic("sys_ipc_recv not implemented");
-	return 0;
+    // LAB 4: Your code here.
+
+    if (dstva < (void *)UTOP && dstva != ROUNDDOWN(dstva, PGSIZE)) {
+        return -E_INVAL;
+    }
+
+    curenv->env_ipc_recving = true;
+    curenv->env_ipc_dstva = dstva;
+    curenv->env_status = ENV_NOT_RUNNABLE;
+    curenv->env_ipc_from=0;
+    sched_yield();
+
+    return 0;
 }
 
 // Dispatches to the correct kernel function, passing the arguments.
@@ -417,6 +470,10 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 		return sys_env_set_status(a1,a2);
     case SYS_env_set_pgfault_upcall:
         return sys_env_set_pgfault_upcall(a1,(void*)a2);
+    case SYS_ipc_try_send:
+        return sys_ipc_try_send(a1,a2,(void*)a3,a4);
+    case SYS_ipc_recv:
+        return sys_ipc_recv((void*)a1);
     default:
         return -E_INVAL;
     }

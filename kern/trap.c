@@ -93,6 +93,14 @@ trap_init(void)
     void simderr_handler();
     void syscall_handler();
 
+	// external interrupt
+	void timer_handler();
+	void kdb_handler();
+	void serial_handler();
+	void spurious_handler();
+	void ide_handler();
+	void error_handler();
+
     SETGATE(idt[T_DIVIDE], 0, GD_KT, divide_handler, 0); // 为什么istrap是0？应该是1才对
     SETGATE(idt[T_DEBUG], 0, GD_KT, debug_handler, 0);
     SETGATE(idt[T_NMI], 0, GD_KT, nmi_handler, 0);
@@ -112,6 +120,14 @@ trap_init(void)
     SETGATE(idt[T_MCHK], 0, GD_KT, mchk_handler, 0);
     SETGATE(idt[T_SIMDERR], 0, GD_KT, simderr_handler, 0);
     SETGATE(idt[T_SYSCALL], 0, GD_KT, syscall_handler, 3);
+
+	SETGATE(idt[IRQ_OFFSET+IRQ_TIMER],0,GD_KT,timer_handler,3);
+	SETGATE(idt[IRQ_OFFSET+IRQ_KBD],0,GD_KT,kdb_handler,3);
+	SETGATE(idt[IRQ_OFFSET+IRQ_SERIAL],0,GD_KT,serial_handler,3);
+	SETGATE(idt[IRQ_OFFSET+IRQ_SPURIOUS],0,GD_KT,spurious_handler,3);
+	SETGATE(idt[IRQ_OFFSET+IRQ_IDE],0,GD_KT,ide_handler,3);
+	SETGATE(idt[IRQ_OFFSET+IRQ_ERROR],0,GD_KT,error_handler,3);
+
     // Per-CPU setup 
 	trap_init_percpu();
 }
@@ -244,6 +260,10 @@ trap_dispatch(struct Trapframe *tf)
     case T_SYSCALL:
         regs->reg_eax = syscall(regs->reg_eax, regs->reg_edx, regs->reg_ecx, regs->reg_ebx, regs->reg_edi, regs->reg_esi);
         break;
+	case IRQ_OFFSET+IRQ_TIMER:
+		lapic_eoi();
+		sched_yield();
+		break;
     default:
 		// Unexpected trap: The user process or the kernel has a bug.
 		print_trapframe(tf);
