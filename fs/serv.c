@@ -214,9 +214,20 @@ serve_read(envid_t envid, union Fsipc *ipc)
 		cprintf("serve_read %08x %08x %08x\n", envid, req->req_fileid, req->req_n);
 
 	// Lab 5: Your code here:
-	return 0;
+    int r;
+    struct OpenFile *o;
+    if ((r = openfile_lookup(envid, req->req_fileid, &o)) < 0)
+        return r;
+    struct File * dst_file = o->o_file;
+    // 读取文件，seek position在Fd中
+    struct Fd *fd = o->o_fd;
+    if((r=file_read(dst_file,ret->ret_buf,req->req_n,fd->fd_offset)) < 0){
+        return r;
+    }
+    //count可能较大，需要返回实际读取内容
+    fd->fd_offset+=r;
+    return r;
 }
-
 
 // Write req->req_n bytes from req->req_buf to req_fileid, starting at
 // the current seek position, and update the seek position
@@ -225,11 +236,22 @@ serve_read(envid_t envid, union Fsipc *ipc)
 int
 serve_write(envid_t envid, struct Fsreq_write *req)
 {
-	if (debug)
-		cprintf("serve_write %08x %08x %08x\n", envid, req->req_fileid, req->req_n);
+    if (debug)
+        cprintf("serve_write %08x %08x %08x\n", envid, req->req_fileid, req->req_n);
 
-	// LAB 5: Your code here.
-	panic("serve_write not implemented");
+    // LAB 5: Your code here.
+    int r;
+    struct OpenFile *o;
+    if ((r = openfile_lookup(envid, req->req_fileid, &o)) < 0)
+        return r;
+    struct File * dst_file = o->o_file;
+    // 读取文件，seek position在Fd中
+    struct Fd *fd = o->o_fd;
+    if((r=file_write(dst_file,req->req_buf,req->req_n,fd->fd_offset))<0){
+        return r;
+    }
+    fd->fd_offset+=r;
+    return r;
 }
 
 // Stat ipc->stat.req_fileid.  Return the file's struct Stat to the

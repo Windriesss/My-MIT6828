@@ -267,6 +267,14 @@ trap_dispatch(struct Trapframe *tf)
 		lapic_eoi();
 		sched_yield();
 		break;
+	case IRQ_OFFSET+IRQ_KBD:
+		lapic_eoi();
+		kbd_intr();
+		break;
+	case IRQ_OFFSET+IRQ_SERIAL:
+		lapic_eoi();
+		serial_intr();
+		break;
     default:
 		// Unexpected trap: The user process or the kernel has a bug.
 		print_trapframe(tf);
@@ -388,45 +396,34 @@ page_fault_handler(struct Trapframe *tf)
 	// LAB 4: Your code here.
     struct UTrapframe *utf;
     if (curenv->env_pgfault_upcall) {
-        // if (tf->tf_esp >= UXSTACKTOP - PGSIZE && tf->tf_esp < UXSTACKTOP) {
-        //     utf = (struct UTrapframe *)(tf->tf_esp - sizeof(struct UTrapframe) - 4);
-        // } else {
-        //     utf = (struct UTrapframe *)(tf->tf_esp - sizeof(struct UTrapframe));
-        // }
-
-        // user_mem_assert(curenv, utf, sizeof(struct UTrapframe), PTE_U | PTE_W);
-        // utf->utf_fault_va = fault_va;
-        // utf->utf_err = tf->tf_trapno;
-        // utf->utf_regs = tf->tf_regs;
-        // utf->utf_eip = tf->tf_eip;
-        // utf->utf_eflags = tf->tf_eflags;
-        // utf->utf_esp = tf->tf_esp;
-
-        // tf->tf_eip = (uint32_t)(curenv->env_pgfault_upcall);
-        // tf->tf_esp = (uint32_t)utf;
-
-        // env_run(curenv);
-        if (UXSTACKTOP - PGSIZE <= tf->tf_esp && tf->tf_esp <= UXSTACKTOP - 1)
+        if (tf->tf_esp >= UXSTACKTOP - PGSIZE && tf->tf_esp < UXSTACKTOP) {
+            // 异常模式下陷入
             utf = (struct UTrapframe *)(tf->tf_esp - sizeof(struct UTrapframe) - 4);
-        else
+        } else {
+            // 非异常模式下陷入
             utf = (struct UTrapframe *)(UXSTACKTOP - sizeof(struct UTrapframe));
-        user_mem_assert(curenv, (void *)utf, sizeof(struct UTrapframe), PTE_U | PTE_W);
+        }
+        // 检查异常栈是否溢出
+        user_mem_assert(curenv, (const void *)utf, sizeof(struct UTrapframe), PTE_P | PTE_W);
 
         utf->utf_fault_va = fault_va;
         utf->utf_err = tf->tf_trapno;
-        utf->utf_eip = tf->tf_eip;
-        utf->utf_eflags = tf->tf_eflags;
-        utf->utf_esp = tf->tf_esp;
         utf->utf_regs = tf->tf_regs;
-        tf->tf_eip = (uint32_t)curenv->env_pgfault_upcall;
-        tf->tf_esp = (uint32_t)utf;
+        utf->utf_eflags = tf->tf_eflags;
+        // 保存陷入时现场，用于返回
+        utf->utf_eip = tf->tf_eip;
+        utf->utf_esp = tf->tf_esp;
+        // 再次转向执行
+        curenv->env_tf.tf_eip = (uint32_t)curenv->env_pgfault_upcall;
+        // 异常栈
+        curenv->env_tf.tf_esp = (uint32_t)utf;
         env_run(curenv);
     } else {
         // Destroy the environment that caused the fault.
-		cprintf("[%08x] user fault va %08x ip %08x\n",
-			curenv->env_id, fault_va, tf->tf_eip);
-		print_trapframe(tf);
-		env_destroy(curenv);
+        cprintf("[%08x] user fault va %08x ip %08x\n",
+                curenv->env_id, fault_va, tf->tf_eip);
+        print_trapframe(tf);
+        env_destroy(curenv);
     }
 }
 

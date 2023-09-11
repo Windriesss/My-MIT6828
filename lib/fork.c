@@ -25,21 +25,23 @@ pgfault(struct UTrapframe *utf)
 	//   (see <inc/memlayout.h>).
 
     // LAB 4: Your code here.
-    if (!((err & FEC_WR) && (uvpd[PDX(addr)] & PTE_P) && (uvpt[PGNUM(addr)] & PTE_P) && (uvpt[PGNUM(addr)] & PTE_COW)))
-        panic("Neither the fault is a write nor COW page. \n");
-    // LAB 4: Your code here.
-    envid_t envid = sys_getenvid();
-    // cprintf("pgfault: envid: %d\n", ENVX(envid));
-    // 临时页暂存
-    if ((r = sys_page_alloc(envid, (void *)PFTEMP, PTE_P | PTE_W | PTE_U)) < 0)
-        panic("pgfault: page allocation fault:%e\n", r);
-    addr = ROUNDDOWN(addr, PGSIZE);
-    memcpy((void *)PFTEMP, (const void *)addr, PGSIZE);
-    if ((r = sys_page_map(envid, (void *)PFTEMP, envid, addr, PTE_P | PTE_W | PTE_U)) < 0)
-        panic("pgfault: page map failed %e\n", r);
+    if (!((err & FEC_WR) && (uvpt[PGNUM(addr)] & PTE_COW)))
+		panic("pgfault:not writabled or a COW page!\n");
 
-    if ((r = sys_page_unmap(envid, (void *)PFTEMP)) < 0)
-        panic("pgfault: page unmap failed %e\n", r);
+	// LAB 4: Your code here.
+	envid_t envid = sys_getenvid();
+    //为PFTEMP分配一个物理页
+	if ((r = sys_page_alloc(envid, (void *)PFTEMP, PTE_P | PTE_W | PTE_U)) < 0)
+		panic("pgfault:page allocation failed: %e", r);
+	addr = ROUNDDOWN(addr, PGSIZE);
+    //将addr上的物理页内容拷贝到PFTEMP指向的物理页上
+	memmove((void *)PFTEMP, (void *)addr, PGSIZE);
+    //更改addr映射的物理页，改为与PFTEMP指向相同
+	if ((r = sys_page_map(envid, PFTEMP, envid, addr, PTE_P | PTE_W | PTE_U)) < 0)
+		panic("pgfault:page map failed: %e", r);
+    //取消PFTEMP的映射
+	if ((r = sys_page_unmap(envid, PFTEMP)) < 0)
+		panic("pgfault: page unmap failed: %e", r);
 }
 
 //
@@ -56,29 +58,31 @@ pgfault(struct UTrapframe *utf)
 static int
 duppage(envid_t envid, unsigned pn)
 {
-        int r;
+    int ret;
 
-        void *addr;
-        pte_t pte;
-        int perm;
+    void *va;
+    pte_t pte;
+    int perm;
 
-        addr = (void *)((uint32_t)pn * PGSIZE);
-        pte = uvpt[pn];
-        perm = PTE_P | PTE_U;
-        if ((pte & PTE_W) || (pte & PTE_COW))
-                perm |= PTE_COW;
-        if ((r = sys_page_map(thisenv->env_id, addr, envid, addr, perm)) < 0) {
-                panic("duppage: page remapping failed %e", r);
-                return r;
-        }
-        if (perm & PTE_COW) {
-                if ((r = sys_page_map(thisenv->env_id, addr, thisenv->env_id, addr, perm)) < 0) {
-                        panic("duppage: page remapping failed %e", r);
-                        return r;
-                }
-        }
+    va = (void *)((uint32_t)pn * PGSIZE);
+    
+    if (uvpt[pn] & PTE_SHARE) {
+        if ((ret = sys_page_map(thisenv->env_id, (void *)va, envid, (void *)va, uvpt[pn] & PTE_SYSCALL)) < 0)
+            return ret;
+    } else if ((uvpt[pn] & PTE_W) || (uvpt[pn] & PTE_COW)) {
+        // 子进程标记
+        if ((ret = sys_page_map(thisenv->env_id, (void *)va, envid, (void *)va, PTE_P | PTE_U | PTE_COW)) < 0)
+            return ret;
+        // 父进程标记
+        if ((ret = sys_page_map(thisenv->env_id, (void *)va, thisenv->env_id, (void *)va, PTE_P | PTE_U | PTE_COW)) < 0)
+            return ret;
+    } else {
+        // 简单映射
+        if ((ret = sys_page_map(thisenv->env_id, (void *)va, envid, (void *)va, PTE_P | PTE_U)) < 0)
+            return ret;
+    }
 
-        return 0;
+    return 0;
 }
 
 //

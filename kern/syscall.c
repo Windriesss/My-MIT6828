@@ -139,7 +139,19 @@ sys_env_set_trapframe(envid_t envid, struct Trapframe *tf)
 	// LAB 5: Your code here.
 	// Remember to check whether the user has supplied us with a good
 	// address!
-	panic("sys_env_set_trapframe not implemented");
+    struct Env *target_env;
+    int res_code;
+    if((res_code = envid2env(envid,&target_env,1))!=0){
+        return res_code;
+    }
+    // CPL 3
+    tf->tf_cs |=3;
+    tf->tf_ss |=3;
+    tf->tf_eflags |= FL_IF;
+    // 清0
+    tf->tf_eflags  &= ~FL_IOPL_3;
+    target_env->env_tf = *tf;
+    return 0;
 }
 
 // Set the page fault upcall for 'envid' by modifying the corresponding struct
@@ -369,41 +381,41 @@ sys_page_unmap(envid_t envid, void *va)
 static int
 sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 {
-     // LAB 4: Your code here.
-     int r;
-     struct Env *recv_e;
-     pte_t *pte;
-     struct PageInfo *page;
-     r = envid2env(envid, &recv_e, 0);
-     if (r < 0) {
+    // LAB 4: Your code here.
+    int r;
+    struct Env *recv_e;
+    pte_t *pte;
+    struct PageInfo *page;
+    r = envid2env(envid, &recv_e, 0);
+    if (r < 0) {
         return r;
     }
-    if(!recv_e->env_ipc_recving|| recv_e->env_status!=ENV_NOT_RUNNABLE){
+    if (!recv_e->env_ipc_recving || recv_e->env_status != ENV_NOT_RUNNABLE) {
         return -E_IPC_NOT_RECV;
     }
-    if (srcva < (void*)UTOP) {
+    if (srcva < (void *)UTOP) {
         if (srcva != ROUNDDOWN(srcva, PGSIZE)) {
             return -E_INVAL;
         }
-        if(!(perm&PTE_U)||!(perm&PTE_P)){
+        if (!(perm & PTE_U) || !(perm & PTE_P)) {
             return -E_INVAL;
         }
-        if((perm&~(PTE_P|PTE_U|PTE_W|PTE_AVAIL))){
+        if ((perm & ~(PTE_P | PTE_U | PTE_W | PTE_AVAIL))) {
             return -E_INVAL;
         }
     }
 
-    page = page_lookup(curenv->env_pgdir,srcva,&pte);
-    if(srcva<(void*)UTOP && page==NULL){
+    page = page_lookup(curenv->env_pgdir, srcva, &pte);
+    if (srcva < (void *)UTOP && page == NULL) {
         return -E_INVAL;
     }
 
-    if ((perm & PTE_W) && !(*pte & PTE_W)) {
+    if (srcva < (void *)UTOP && (perm & PTE_W) && !(*pte & PTE_W)) {
         return -E_INVAL;
     }
 
-    if(srcva < (void*)UTOP&&recv_e->env_ipc_dstva!=0){
-        if((page_insert(recv_e->env_pgdir,page,recv_e->env_ipc_dstva,perm)<0)){
+    if (srcva < (void *)UTOP && recv_e->env_ipc_dstva != 0) {
+        if ((page_insert(recv_e->env_pgdir, page, recv_e->env_ipc_dstva, perm) < 0)) {
             return -E_NO_MEM;
         }
         recv_e->env_ipc_perm = perm;
@@ -412,7 +424,7 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
     recv_e->env_ipc_recving = false;
     recv_e->env_ipc_value = value;
     recv_e->env_status = ENV_RUNNABLE;
-    recv_e->env_tf.tf_regs.reg_eax=0;
+    recv_e->env_tf.tf_regs.reg_eax = 0;
     return 0;
 }
 
@@ -486,6 +498,8 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
         return sys_ipc_try_send(a1,a2,(void*)a3,a4);
     case SYS_ipc_recv:
         return sys_ipc_recv((void*)a1);
+    case SYS_env_set_trapframe:
+        return sys_env_set_trapframe(a1, (void*)a2);
     default:
         return -E_INVAL;
     }
