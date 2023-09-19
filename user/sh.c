@@ -55,10 +55,20 @@ again:
 			// then close the original 'fd'.
 
 			// LAB 5: Your code here.
-			panic("< redirection not implemented");
-			break;
+            if ((r = open(t, O_RDONLY)) < 0){
+                cprintf("oepn %s errr,%e",t,r);
+                exit();
+            }
+            fd = r;
+            if(fd!=0){
+                if((r=dup(fd,0)<0)){
+                    panic("duplicate error!");
+                }
+                close(fd);
+            }
+            break;
 
-		case '>':	// Output redirection
+        case '>':	// Output redirection
 			// Grab the filename from the argument list
 			if (gettoken(0, &t) != 'w') {
 				cprintf("syntax error: > not followed by word\n");

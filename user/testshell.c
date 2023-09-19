@@ -22,6 +22,7 @@ umain(int argc, char **argv)
 	wfd = pfds[1];
 
 	cprintf("running sh -x < testshell.sh | cat\n");
+	cprintf("mylog=====================1\n");
 	if ((r = fork()) < 0)
 		panic("fork: %e", r);
 	if (r == 0) {
@@ -38,11 +39,9 @@ umain(int argc, char **argv)
 	}
 	close(rfd);
 	close(wfd);
-
 	rfd = pfds[0];
 	if ((kfd = open("testshell.key", O_RDONLY)) < 0)
 		panic("open testshell.key for reading: %e", kfd);
-
 	nloff = 0;
 	for (off=0;; off++) {
 		n1 = read(rfd, &c1, 1);
@@ -59,7 +58,6 @@ umain(int argc, char **argv)
 			nloff = off+1;
 	}
 	cprintf("shell ran correctly\n");
-
 	breakpoint();
 }
 

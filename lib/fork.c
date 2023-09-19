@@ -24,17 +24,24 @@ pgfault(struct UTrapframe *utf)
 	//   Use the read-only page table mappings at uvpt
 	//   (see <inc/memlayout.h>).
 
-	// LAB 4: Your code here.
-
-	// Allocate a new page, map it at a temporary location (PFTEMP),
-	// copy the data from the old page to the new page, then move the new
-	// page to the old page's address.
-	// Hint:
-	//   You should make three system calls.
+    // LAB 4: Your code here.
+    if (!((err & FEC_WR) && (uvpt[PGNUM(addr)] & PTE_COW)))
+		panic("pgfault:not writabled or a COW page!\n");
 
 	// LAB 4: Your code here.
-
-	panic("pgfault not implemented");
+	envid_t envid = sys_getenvid();
+    //为PFTEMP分配一个物理页
+	if ((r = sys_page_alloc(envid, (void *)PFTEMP, PTE_P | PTE_W | PTE_U)) < 0)
+		panic("pgfault:page allocation failed: %e", r);
+	addr = ROUNDDOWN(addr, PGSIZE);
+    //将addr上的物理页内容拷贝到PFTEMP指向的物理页上
+	memmove((void *)PFTEMP, (void *)addr, PGSIZE);
+    //更改addr映射的物理页，改为与PFTEMP指向相同
+	if ((r = sys_page_map(envid, PFTEMP, envid, addr, PTE_P | PTE_W | PTE_U)) < 0)
+		panic("pgfault:page map failed: %e", r);
+    //取消PFTEMP的映射
+	if ((r = sys_page_unmap(envid, PFTEMP)) < 0)
+		panic("pgfault: page unmap failed: %e", r);
 }
 
 //
@@ -51,11 +58,31 @@ pgfault(struct UTrapframe *utf)
 static int
 duppage(envid_t envid, unsigned pn)
 {
-	int r;
+    int ret;
 
-	// LAB 4: Your code here.
-	panic("duppage not implemented");
-	return 0;
+    void *va;
+    pte_t pte;
+    int perm;
+
+    va = (void *)((uint32_t)pn * PGSIZE);
+    
+    if (uvpt[pn] & PTE_SHARE) {
+        if ((ret = sys_page_map(thisenv->env_id, (void *)va, envid, (void *)va, uvpt[pn] & PTE_SYSCALL)) < 0)
+            return ret;
+    } else if ((uvpt[pn] & PTE_W) || (uvpt[pn] & PTE_COW)) {
+        // 子进程标记
+        if ((ret = sys_page_map(thisenv->env_id, (void *)va, envid, (void *)va, PTE_P | PTE_U | PTE_COW)) < 0)
+            return ret;
+        // 父进程标记
+        if ((ret = sys_page_map(thisenv->env_id, (void *)va, thisenv->env_id, (void *)va, PTE_P | PTE_U | PTE_COW)) < 0)
+            return ret;
+    } else {
+        // 简单映射
+        if ((ret = sys_page_map(thisenv->env_id, (void *)va, envid, (void *)va, PTE_P | PTE_U)) < 0)
+            return ret;
+    }
+
+    return 0;
 }
 
 //
@@ -74,11 +101,51 @@ duppage(envid_t envid, unsigned pn)
 //   Neither user exception stack should ever be marked copy-on-write,
 //   so you must allocate a new page for the child's user exception stack.
 //
+
+
 envid_t
 fork(void)
 {
-	// LAB 4: Your code here.
-	panic("fork not implemented");
+    // LAB 4: Your code here.
+    envid_t envid;
+    int r;
+    size_t i, j, pn;
+    // Set up our page fault handler
+    set_pgfault_handler(pgfault);
+
+    envid = sys_exofork();
+
+    if (envid < 0) {
+        panic("sys_exofork failed: %e", envid);
+    }
+
+    if (envid == 0) {
+        // child
+        thisenv = &envs[ENVX(sys_getenvid())];
+        return 0;
+    }
+    // here is parent !
+    // Copy our address space and page fault handler setup to the child.
+
+    for (pn = PGNUM(UTEXT); pn < PGNUM(USTACKTOP); pn++) {
+        if ((uvpd[pn >> 10] & PTE_P) && (uvpt[pn] & PTE_P)) {
+            // 页表
+            if ((r = duppage(envid, pn)) < 0)
+                return r;
+        }
+    }
+    // alloc a page and map child exception stack
+    if ((r = sys_page_alloc(envid, (void *)(UXSTACKTOP - PGSIZE), PTE_U | PTE_P | PTE_W)) < 0)
+        return r;
+    extern void _pgfault_upcall(void);
+    if ((r = sys_env_set_pgfault_upcall(envid, _pgfault_upcall)) < 0)
+        return r;
+
+    // Start the child environment running
+    if ((r = sys_env_set_status(envid, ENV_RUNNABLE)) < 0)
+        panic("sys_env_set_status: %e", r);
+
+    return envid;
 }
 
 // Challenge!
