@@ -2,6 +2,11 @@
     "files.associations": {
         "syscall.h": "c",
         "mmu.h": "c",
-        "trap.h": "c"
+        "trap.h": "c",
+        "pmap.h": "c",
+        "e1000_hw.h": "c",
+        "ns.h": "c",
+        "e1000.h": "c",
+        "string.h": "c"
     }
 }

@@ -10,4 +10,19 @@ output(envid_t ns_envid)
 	// LAB 6: Your code here:
 	// 	- read a packet from the network server
 	//	- send the packet to the device driver
+
+	uint32_t whom;
+	int perm;
+	int32_t req;
+
+	while(true){
+		req = ipc_recv((envid_t *)&whom,&nsipcbuf,&perm);
+		if(req != NSREQ_OUTPUT){
+			continue;
+		}
+        while (sys_pkt_try_send(nsipcbuf.pkt.jp_data, nsipcbuf.pkt.jp_len) < 0) {
+            sys_yield();
+        }
+    }
+
 }
