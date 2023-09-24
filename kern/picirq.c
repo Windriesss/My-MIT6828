@@ -22,7 +22,7 @@ pic_init(void)
 	outb(IO_PIC2+1, 0xFF);
 
 	// Set up master (8259A-1)
-
+	// Interrupt Control Word
 	// ICW1:  0001g0hi
 	//    g:  0 = edge triggering, 1 = level triggering
 	//    h:  0 = cascaded PICs, 1 = master only

@@ -1,11 +1,23 @@
 #ifndef JOS_KERN_E1000_H
 #define JOS_KERN_E1000_H
 
-#include <kern/pci.h>
+#include <inc/types.h>
 
-#define PCI_E1000_VENDOR_ID 0x8086
+#define PCI_E1000_VENDER_ID 0x8086
 #define PCI_E1000_DEVICE_ID 0x100E
 
+/* 循环队列的长度*/
+#define TX_DESC_SIZE     32
+#define TX_PACKET_SIZE   2048
+
+#define RX_DESC_SIZE     128
+#define RX_PACKET_SIZE   2048
+
+/* Register Set
+ * 
+ * RW - register is both readable and writable
+ * 
+ */
 
 #define E1000_DEVICE_STATUS   0x00008  /* Device Status - RO */
 
@@ -55,6 +67,22 @@
 
 
 
+/* Transmit Descriptor */
+struct E1000TxDesc {
+    uint64_t buffer_addr;       /* Address of the descriptor's data buffer */
+
+	uint16_t length;    /* Data buffer length */
+    uint8_t cso;        /* Checksum offset */
+    uint8_t cmd;        /* Descriptor control */
+
+    uint8_t status;     /* Descriptor status */
+    uint8_t css;        /* Checksum start */
+    uint16_t special;
+
+}__attribute__((packed));
+
+
+
 /* Transmit Descriptor bit definitions */
 #define E1000_TXD_DTYP_D     0x00100000 /* Data Descriptor */
 #define E1000_TXD_DTYP_C     0x00000000 /* Context Descriptor */
@@ -69,19 +97,18 @@
 #define E1000_TXD_STAT_TU    0x00000008 /* Transmit underrun */
 #define E1000_TXD_STAT_TC    0x00000004 /* Tx Underrun */
 
-/* Transmit Descriptor */
-struct E1000TxDesc {
-    uint64_t buffer_addr;       /* Address of the descriptor's data buffer */
 
-    uint16_t length;    /* Data buffer length */
-    uint8_t cso;        /* Checksum offset */
-    uint8_t cmd;        /* Descriptor control */
+/* Receive Descriptor */
+struct E1000RxDesc {
+	uint64_t buffer_addr;
+	uint16_t length;             /* Data buffer length */
+	uint16_t chksum;             /* Check Sum */
+	uint8_t  status;
+	uint8_t  err;
+	uint16_t special;
+};
 
-    uint8_t status;     /* Descriptor status */
-    uint8_t css;        /* Checksum start */
-    uint16_t special;
-
-}__attribute__((packed));
+/* Transmit Descriptor bit definitions */
 
 
 #define E1000_RAH_AV            0x80000000        /* Receive descriptor valid */
@@ -99,37 +126,10 @@ struct E1000TxDesc {
 #define E1000_RCTL_SZ_4096        0x00030000    /* rx buffer size 4096 */
 
 
-struct E1000RxDesc {
-    uint64_t buffer_addr;
-    uint16_t length;    /* Data buffer length */
-    uint8_t cso;        /* Checksum offset */
-
-    uint8_t status;
-    uint8_t err;
-    uint16_t special; 
-    
-}__attribute__((packed));
-
-
-#define E1000_DEVICE_STATUS 0x00008
-
-#define E1000_LOCATE(offset)  (offset >> 2)
-
-#define TX_DESC_SIZE 32
-#define TX_PACKET_SIZE 2048
-
-#define RX_DESC_SIZE 128
-#define RX_PACKET_SIZE 2048
-
-
-int pci_e1000_attach(struct pci_func * pcif);
-void e1000_transmit_init();
-int e1000_transmit(void* addr,size_t len);
-void e1000_receive_init();
-int e1000_receive(void* buf, size_t *len);
+int e1000_transmit(void *addr, size_t len);
+int e1000_receive(void *buf, size_t *len);
 
 
 #endif  // SOL >= 6
-
 
 

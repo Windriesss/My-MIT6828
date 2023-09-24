@@ -24,7 +24,7 @@
 //
 // If this is a recursive fault, the kernel will reserve for us a
 // blank word above the trap-time esp for scratch work when we unwind
-// the recursive call.
+// the recursive call. 
 //
 // We then have call up to the appropriate page fault handler in C
 // code, pointed to by the global variable '_pgfault_handler'.
@@ -36,7 +36,7 @@ _pgfault_upcall:
 	pushl %esp			// function argument: pointer to UTF
 	movl _pgfault_handler, %eax
 	call *%eax
-	addl $4, %esp			// pop function argument
+	addl $4, %esp			// pop function argument 恢复栈
 	
 	// Now the C page fault handler has returned and you must return
 	// to the trap time state.
@@ -64,19 +64,27 @@ _pgfault_upcall:
 	// may find that you have to rearrange your code in non-obvious
 	// ways as registers become unavailable as scratch space.
 	//
-
-
-	addl $8, %esp                 // esp+8 -> PushRegs   over utf_fault_va utf_err
-    movl 0x20(%esp), %eax         // eax = (esp+0x20 -> utf_eip )
-    subl $4, 0x28(%esp)           // for trap time eip 保留32bit,   esp+48 = utf_esp
-    movl 0x28(%esp), %edx         // %edx = utf_esp-4  
-    movl %eax, (%edx)             // %eax = eip ----> esp-4  以至于ret可以直接读取其继续执行的地址
-    
-    popal              // after popal esp->utf_eip
-
-    addl $4, %esp      // esp+4 -> utf_eflags
-    popfl
-
-    popl %esp
-
-    ret                   // 这里十分巧妙， ret会读取esp指向的第一个内容， 也就是我们第一步写入的eip
+	// LAB 4: Your code here.
+    // Struct PushRegs size = 32 
+    addl $8, %esp                 // esp+8 -> PushRegs   over utf_fault_va utf_err
+	movl 0x20(%esp), %eax         // eax = (esp+0x20 -> utf_eip )
+	subl $4, 0x28(%esp)           // for trap time eip 保留32bit,   esp+48 = utf_esp
+	movl 0x28(%esp), %edx         // %edx = utf_esp-4  
+	movl %eax, (%edx)             // %eax = eip ----> esp-4  以至于ret可以直接读取其继续执行的地址
+	
+	// Restore the trap-time registers.  After you do this, you
+	// can no longer modify any general-purpose registers.
+	// LAB 4: Your code here.
+	popal              // after popal esp->utf_eip
+	// Restore eflags from the stack.  After you do this, you can
+	// no longer use arithmetic operations or anything else that
+	// modifies eflags.
+	// LAB 4: Your code here.
+	addl $4, %esp      // esp+4 -> utf_eflags
+	popfl
+	// Switch back to the adjusted trap-time stack.
+	// LAB 4: Your code here.
+	popl %esp
+	// Return to re-execute the instruction that faulted.
+	// LAB 4: Your code here.
+	ret                   // 这里十分巧妙， ret会读取esp指向的第一个内容， 也就是我们第一步写入的eip

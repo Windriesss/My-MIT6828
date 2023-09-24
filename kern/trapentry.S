@@ -32,7 +32,10 @@
 /* Use TRAPHANDLER_NOEC for traps where the CPU doesn't push an error code.
  * It pushes a 0 in place of the error code, so the trap frame has the same
  * format in either case.
+
+ * tarp handler no error code
  */
+ 
 #define TRAPHANDLER_NOEC(name, num)					\
 	.globl name;							\
 	.type name, @function;						\
@@ -45,61 +48,62 @@
 .text
 
 /*
+ * 我们知道哪些trap是有错误代码的？ https://wiki.osdev.org/Exceptions
  * Lab 3: Your code here for generating entry points for the different traps.
  */
-TRAPHANDLER_NOEC(divide_error_handler, T_DIVIDE)
-TRAPHANDLER_NOEC(debug_exception_handler, T_DEBUG)
-TRAPHANDLER_NOEC(non_maskable_interrupt_handler, T_NMI)
-TRAPHANDLER_NOEC(breakpoint_handler, T_BRKPT)
-TRAPHANDLER_NOEC(overflow_handler, T_OFLOW)
-TRAPHANDLER_NOEC(bounds_check_handler, T_BOUND)
-TRAPHANDLER_NOEC(invalid_opcode_handler, T_ILLOP)
-TRAPHANDLER_NOEC(device_not_available_handler, T_DEVICE)
-TRAPHANDLER(double_fault_handler, T_DBLFLT)
-TRAPHANDLER(invalid_tss_handler, T_TSS)
-TRAPHANDLER(segment_not_present_handler, T_SEGNP)
-TRAPHANDLER(stack_exception_handler, T_STACK)
-TRAPHANDLER(general_protection_fault_handler, T_GPFLT)
-TRAPHANDLER(pagefault_handler, T_PGFLT)
-TRAPHANDLER_NOEC(floating_point_error_handler, T_FPERR)
-TRAPHANDLER(alignment_check_handler, T_ALIGN)
-TRAPHANDLER_NOEC(machine_check_handler, T_MCHK)
-TRAPHANDLER_NOEC(simd_floating_point_error_handler, T_SIMDERR)
-TRAPHANDLER_NOEC(system_call, T_SYSCALL)
+TRAPHANDLER_NOEC(divide_handler, T_DIVIDE);
+TRAPHANDLER_NOEC(debug_handler, T_DEBUG);
+TRAPHANDLER_NOEC(nmi_handler, T_NMI);
+TRAPHANDLER_NOEC(brkpt_handler, T_BRKPT);
+TRAPHANDLER_NOEC(oflow_handler, T_OFLOW);
+TRAPHANDLER_NOEC(bound_handler, T_BOUND);
+TRAPHANDLER_NOEC(illop_handler, T_ILLOP);
+TRAPHANDLER_NOEC(device_handler, T_DEVICE);
+TRAPHANDLER(dblflt_handler, T_DBLFLT);
+TRAPHANDLER(tss_handler, T_TSS);
+TRAPHANDLER(segnp_handler, T_SEGNP);
+TRAPHANDLER(stack_handler, T_STACK);
+TRAPHANDLER(gpflt_handler, T_GPFLT);
+TRAPHANDLER(pgflt_handler, T_PGFLT);
+TRAPHANDLER_NOEC(fperr_handler, T_FPERR);
+TRAPHANDLER(align_handler, T_ALIGN);
+TRAPHANDLER_NOEC(mchk_handler, T_MCHK);
+TRAPHANDLER_NOEC(simderr_handler, T_SIMDERR);
+TRAPHANDLER_NOEC(syscall_handler, T_SYSCALL);
 
-TRAPHANDLER_NOEC(irq_0_handler,  IRQ_OFFSET + 0);
-TRAPHANDLER_NOEC(irq_1_handler,  IRQ_OFFSET + 1);
-TRAPHANDLER_NOEC(irq_2_handler,  IRQ_OFFSET + 2);
-TRAPHANDLER_NOEC(irq_3_handler,  IRQ_OFFSET + 3);
-TRAPHANDLER_NOEC(irq_4_handler,  IRQ_OFFSET + 4);
-TRAPHANDLER_NOEC(irq_5_handler,  IRQ_OFFSET + 5);
-TRAPHANDLER_NOEC(irq_6_handler,  IRQ_OFFSET + 6);
-TRAPHANDLER_NOEC(irq_7_handler,  IRQ_OFFSET + 7);
-TRAPHANDLER_NOEC(irq_8_handler,  IRQ_OFFSET + 8);
-TRAPHANDLER_NOEC(irq_9_handler,  IRQ_OFFSET + 9);
-TRAPHANDLER_NOEC(irq_10_handler, IRQ_OFFSET + 10);
-TRAPHANDLER_NOEC(irq_11_handler, IRQ_OFFSET + 11);
-TRAPHANDLER_NOEC(irq_12_handler, IRQ_OFFSET + 12);
-TRAPHANDLER_NOEC(irq_13_handler, IRQ_OFFSET + 13);
-TRAPHANDLER_NOEC(irq_14_handler, IRQ_OFFSET + 14);
-TRAPHANDLER_NOEC(irq_15_handler, IRQ_OFFSET + 15);
+// IRQs
+TRAPHANDLER_NOEC(timer_handler, IRQ_OFFSET + IRQ_TIMER);
+TRAPHANDLER_NOEC(kbd_handler, IRQ_OFFSET + IRQ_KBD);
+TRAPHANDLER_NOEC(serial_handler, IRQ_OFFSET + IRQ_SERIAL);
+TRAPHANDLER_NOEC(spurious_handler, IRQ_OFFSET + IRQ_SPURIOUS);
+TRAPHANDLER_NOEC(ide_handler, IRQ_OFFSET + IRQ_IDE);
+TRAPHANDLER_NOEC(error_handler, IRQ_OFFSET + IRQ_ERROR);
+
+
+/*
+Your _alltraps should:
+	1. push values to make the stack look like a struct Trapframe
+	2. load GD_KD into %ds and %es
+	3. pushl %esp to pass a pointer to the Trapframe as an argument to trap()
+	4. call trap (can trap ever return?)
+*/
 
 /*
  * Lab 3: Your code here for _alltraps
+ *what is padding ? 填充 pushl %ds;小端模式，是指数据的高字节保存在内存的高地址中
  */
+.globl _alltraps
 _alltraps:
-# push ds and es and general registers
-push %ds
-push %es
-pushal
+	
+	pushl %ds;
+	pushl %es;
+	pushal;
+	
+	movw $GD_KD, %ax;
+	movw %ax, %ds;
+	movw %ax, %es;
 
-# load ds and es with GD_KD, for kernel stack locates in data
-mov $GD_KD, %ax
-mov %ax, %ds
-mov %ax, %es
-
-# pass tf as an argument
-pushl %esp
-
-# call trap and no need to return
-call trap
+	/*push esp, trap 能自己读esp, 我有点觉得是赋值*/
+	pushl %esp;        
+	call trap
+	

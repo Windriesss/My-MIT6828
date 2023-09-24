@@ -101,12 +101,16 @@ spawn(const char *prog, const char **argv)
 	// Create new child environment
 	if ((r = sys_exofork()) < 0)
 		return r;
-	child = r;
 
+	// 父进程返回子进程的PID
+	child = r;
+	
 	// Set up trap frame, including initial stack.
+	// 复制 tf, 修改eip 指向子进程代码进入点
 	child_tf = envs[ENVX(child)].env_tf;
 	child_tf.tf_eip = elf->e_entry;
 
+	// 利用栈向子进程传递参数
 	if ((r = init_stack(child, argv, &child_tf.tf_esp)) < 0)
 		return r;
 
@@ -302,17 +306,20 @@ static int
 copy_shared_pages(envid_t child)
 {
 	// LAB 5: Your code here.
-    unsigned pn;
-    int r;
-    for (pn=PGNUM(UTEXT); pn<PGNUM(USTACKTOP); pn++){ 
-        if ((uvpd[pn >> 10] & PTE_P) && (uvpt[pn] & PTE_P)){
-            if((uvpt[pn] & PTE_SHARE) == PTE_SHARE){
-                if((r=sys_page_map(0,(void *)(pn*PGSIZE),child,(void *)(pn*PGSIZE),uvpt[pn]&PTE_SYSCALL))<0){
-                    panic("copy_shared_pages for child!va:%08x,error:%08x\n",(pn*PGSIZE),r);
-                    return r;
-                }
-            }
-        }
-    }
-    return 0;
+
+	size_t pn;
+	int r;
+	struct Env *e;
+	
+	for (pn = PGNUM(UTEXT); pn < PGNUM(UTOP); pn++) {
+		if ( (uvpd[pn >> 10] & PTE_P) && (uvpt[pn] & PTE_P) ) {
+			if (uvpt[pn] & PTE_SHARE) {
+				if ( (r = sys_page_map(thisenv->env_id, (void *)(pn*PGSIZE), child, (void *)(pn*PGSIZE), uvpt[pn] & PTE_SYSCALL )) < 0)
+					return r;				
+			}
+		}
+	}
+
+	return 0;
 }
+

@@ -123,12 +123,16 @@ sys_time_msec(void)
 	return (unsigned int) syscall(SYS_time_msec, 0, 0, 0, 0, 0, 0);
 }
 
-int sys_pkt_try_send(void *buf, size_t len)
+int 
+sys_pkt_try_send(void *buf, size_t len)
 {
-    return syscall(SYS_pkt_try_send, 1, (uint32_t)buf, len, 0, 0, 0);
+	return syscall(SYS_pkt_try_send, 1, (uint32_t)buf, (uint32_t)len, 0, 0, 0);
 }
 
-int sys_pkt_try_receive(void *buf, size_t* len)
+
+int 
+sys_pkt_try_receive(void *rev_buf, size_t *len)
 {
-    return syscall(SYS_pkt_try_receive, 1, (uint32_t)buf, (uint32_t)len, 0, 0, 0);
+	return syscall(SYS_pkt_try_recv, 1, (uint32_t)rev_buf, (uint32_t)len, 0, 0, 0);
 }
+

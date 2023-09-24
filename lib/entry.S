@@ -11,6 +11,7 @@
 	.globl uvpt
 	.set uvpt, UVPT
 	.globl uvpd
+	// 为什么不直接写 >>10 ?
 	.set uvpd, (UVPT+(UVPT>>12)*4)
 
 
